@@ -80,6 +80,13 @@ Para cortar una versión, un comando:
 El script valida la versión (`X.Y.Z`), exige árbol git limpio, rechaza tags repetidos y
 detecta solo el remote/rama.
 
+Para **rehacer** una versión ya publicada (solo si nadie la descargó), `--force` borra el
+release y el tag y los recrea en el HEAD actual:
+
+```bash
+./release.sh 1.0.0 --force
+```
+
 ## Buscar actualizaciones
 
 ClawBar consulta GitHub Releases (`javierpr0/ClawBar`): una vez al día en silencio y
