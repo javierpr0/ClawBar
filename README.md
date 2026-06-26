@@ -61,9 +61,28 @@ Quita los hooks y el arranque automático.
 ./bundle.sh   # genera ClawBar.app (LSUIElement, menu-bar agent)
 ```
 
-Produce un `.app` de doble clic. La distribución firmada con auto-update real
-(Sparkle: appcast + firma + hosting) queda pendiente; para actualizar desde fuente
-basta `./install.sh`.
+Produce un `.app` de doble clic (sin firmar: en otra Mac, abrir con clic derecho →
+Abrir la primera vez). La distribución firmada/notarizada con auto-update silencioso
+(Sparkle) queda pendiente.
+
+## Releases automáticos
+
+Al hacer push de un tag `v*`, el workflow `.github/workflows/release.yml` compila,
+empaqueta `ClawBar.app`, lo zipea y publica un GitHub Release con el `.zip` + el binario.
+El tag también fija la versión del binario (`v1.2.0` → `VERSION = "1.2.0"`).
+
+```bash
+# editar VERSION en Sources/clawbar/Core.swift, luego:
+git tag v1.0.0
+git push master v1.0.0   # CI crea el release
+```
+
+## Buscar actualizaciones
+
+ClawBar consulta GitHub Releases (`javierpr0/ClawBar`): una vez al día en silencio y
+manualmente desde el menú. Si hay un tag más nuevo que la versión instalada, el menú
+muestra **⬆ Actualización vX disponible** y abre la página de descarga. Sin certificado
+ni hosting extra.
 
 ## Como plugin de Claude Code
 

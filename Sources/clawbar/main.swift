@@ -32,6 +32,7 @@ app.run()
 
 let CLAUDE_ORANGE = NSColor(srgbRed: 0.851, green: 0.467, blue: 0.341, alpha: 1) // #d97757
 let WAIT_YELLOW = NSColor(srgbRed: 0.95, green: 0.73, blue: 0.18, alpha: 1)
+let UPDATE_REPO = "javierpr0/ClawBar" // GitHub repo for the Releases update check
 
 // MARK: - Menu bar app
 
@@ -45,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var lastSig = ""
     var notifiedWaiting = Set<String>() // sessions we've already alerted about (one banner per gate)
     var prefsWindow: NSWindow?
+    var pendingUpdate: (tag: String, url: String)? // set when a newer GitHub release is found
     let defaults = UserDefaults.standard
 
     // soft completion chime (embedded mp3); falls back to a system sound
@@ -104,6 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let t = Timer(timeInterval: 0.066, repeats: true) { [weak self] _ in self?.tick() } // ~15 fps
         RunLoop.main.add(t, forMode: .common)
         timer = t
+
+        maybeAutoCheck() // silent once-a-day update check
     }
 
     // MARK: loop
@@ -335,6 +339,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         header.isEnabled = false
         menu.addItem(header)
 
+        if let up = pendingUpdate {
+            menu.addItem(.separator())
+            let it = NSMenuItem(title: "⬆ Actualización \(up.tag) disponible", action: #selector(openUpdate), keyEquivalent: "")
+            it.target = self
+            menu.addItem(it)
+        }
+
         // active-session detail rows (model + flags, working dir, tools, tokens)
         if let s = activeSession() {
             if let m = s.model { addInfo("Modelo: \(modelName(m))\(badges(s))") }
@@ -550,12 +561,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert("Hooks reinstalados", "Reinicia las sesiones de Claude Code abiertas para que tomen los hooks.")
     }
 
-    // #12: source installs update via `git pull && ./install.sh`. A signed .app + Sparkle
-    // appcast needs hosting/signing (see README); here we just report the running version.
+    // MARK: update check (GitHub Releases)
+
     @objc func checkForUpdate() {
-        alert("ClawBar v\(VERSION)",
-              "Para actualizar: en la carpeta del proyecto corre  ./install.sh  (recompila y recarga el agente). "
-              + "La distribución firmada con auto-update (Sparkle) está pendiente.")
+        fetchLatestRelease { [weak self] tag, url in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                guard let tag = tag else {
+                    self.alert("Sin conexión", "No se pudo consultar GitHub Releases.")
+                    return
+                }
+                if self.isNewer(tag, than: VERSION) {
+                    let link = url ?? "https://github.com/\(UPDATE_REPO)/releases/latest"
+                    self.pendingUpdate = (tag, link)
+                    self.promptDownload(tag: tag, url: link)
+                } else {
+                    self.alert("Estás al día", "ClawBar v\(VERSION) es la última versión.")
+                }
+            }
+        }
+    }
+
+    // Throttled to once per day; silently flags an available update for the menu.
+    func maybeAutoCheck() {
+        let now = Date().timeIntervalSince1970
+        if now - defaults.double(forKey: "lastUpdateCheck") < 86400 { return }
+        defaults.set(now, forKey: "lastUpdateCheck")
+        fetchLatestRelease { [weak self] tag, url in
+            guard let self = self, let tag = tag, self.isNewer(tag, than: VERSION) else { return }
+            DispatchQueue.main.async {
+                self.pendingUpdate = (tag, url ?? "https://github.com/\(UPDATE_REPO)/releases/latest")
+            }
+        }
+    }
+
+    func fetchLatestRelease(_ done: @escaping (String?, String?) -> Void) {
+        guard let url = URL(string: "https://api.github.com/repos/\(UPDATE_REPO)/releases/latest") else {
+            done(nil, nil); return
+        }
+        var req = URLRequest(url: url)
+        req.setValue("ClawBar/\(VERSION)", forHTTPHeaderField: "User-Agent") // GitHub requires a UA
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 10
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            guard let data = data,
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tag = obj["tag_name"] as? String else { done(nil, nil); return }
+            done(tag, obj["html_url"] as? String)
+        }.resume()
+    }
+
+    func promptDownload(tag: String, url: String) {
+        let a = NSAlert()
+        a.messageText = "Actualización disponible: \(tag)"
+        a.informativeText = "Tienes v\(VERSION). ¿Abrir la página de descarga?"
+        a.addButton(withTitle: "Descargar")
+        a.addButton(withTitle: "Ahora no")
+        NSApp.activate(ignoringOtherApps: true)
+        if a.runModal() == .alertFirstButtonReturn, let u = URL(string: url) { NSWorkspace.shared.open(u) }
+    }
+
+    @objc func openUpdate() {
+        if let u = pendingUpdate.flatMap({ URL(string: $0.url) }) { NSWorkspace.shared.open(u) }
+    }
+
+    func isNewer(_ remote: String, than local: String) -> Bool {
+        func parts(_ s: String) -> [Int] {
+            String(s.drop(while: { !$0.isNumber })) // strip a leading "v"
+                .split(separator: ".").map { Int($0.prefix(while: \.isNumber)) ?? 0 }
+        }
+        let a = parts(remote), b = parts(local)
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0, y = i < b.count ? b[i] : 0
+            if x != y { return x > y }
+        }
+        return false
     }
 
     func alert(_ title: String, _ body: String) {

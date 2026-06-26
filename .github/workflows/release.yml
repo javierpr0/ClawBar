@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # Keep the built binary's reported version in sync with the tag (v1.2.3 -> 1.2.3),
+      # so ClawBar's own update check doesn't flag the release as outdated against itself.
+      - name: Set version from tag
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          sed -i '' "s/let VERSION = \".*\"/let VERSION = \"$V\"/" Sources/clawbar/Core.swift
+
+      - name: Build ClawBar.app
+        run: ./bundle.sh
+
+      - name: Zip app
+        run: ditto -c -k --keepParent ClawBar.app ClawBar.app.zip
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            ClawBar.app.zip .build/release/clawbar \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
