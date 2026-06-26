@@ -15,7 +15,7 @@ if args.count >= 2 {
         Install.uninstall()
         exit(0)
     case "--version", "version":
-        print("claude-status-bar \(VERSION)")
+        print("clawbar \(VERSION)")
         exit(0)
     default:
         break
@@ -367,7 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         addItem("Reinstalar hooks", #selector(reinstall))
         addItem("Buscar actualizaciones…", #selector(checkForUpdate))
-        let about = NSMenuItem(title: "claude-status-bar v\(VERSION)", action: nil, keyEquivalent: "")
+        let about = NSMenuItem(title: "ClawBar v\(VERSION)", action: nil, keyEquivalent: "")
         about.isEnabled = false
         menu.addItem(about)
         menu.addItem(.separator())
@@ -553,7 +553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // #12: source installs update via `git pull && ./install.sh`. A signed .app + Sparkle
     // appcast needs hosting/signing (see README); here we just report the running version.
     @objc func checkForUpdate() {
-        alert("claude-status-bar v\(VERSION)",
+        alert("ClawBar v\(VERSION)",
               "Para actualizar: en la carpeta del proyecto corre  ./install.sh  (recompila y recarga el agente). "
               + "La distribución firmada con auto-update (Sparkle) está pendiente.")
     }

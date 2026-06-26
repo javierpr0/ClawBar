@@ -1,8 +1,8 @@
-# claude-status-bar
+# ClawBar
 
 App ligera para la barra de menús de macOS que muestra el estado de Claude Code de un
-vistazo. Sin ventana principal, sin ícono en el Dock. Un único binario Swift que también
-actúa como hook y como instalador.
+vistazo. Sin ventana principal, sin ícono en el Dock. Un único binario Swift (`clawbar`) que
+también actúa como hook y como instalador. MIT.
 
 ## Qué muestra
 
@@ -42,7 +42,7 @@ Funciona con Claude Code en terminal, la pestaña **Code** de la app de escritor
 ./install.sh
 ```
 
-Esto compila, copia el binario a `~/.claude-status-bar/bin/`, escribe los hooks en
+Esto compila, copia el binario a `~/.clawbar/bin/`, escribe los hooks en
 `~/.claude/settings.json` (idempotente, respeta tus hooks existentes) e instala un
 LaunchAgent para arrancar la app al iniciar sesión. Reinicia las sesiones de Claude Code
 abiertas para que tomen los hooks. Vuelve a ejecutarlo para actualizar.
@@ -50,7 +50,7 @@ abiertas para que tomen los hooks. Vuelve a ejecutarlo para actualizar.
 ## Desinstalar
 
 ```bash
-.build/release/claude-status-bar uninstall
+.build/release/clawbar uninstall
 ```
 
 Quita los hooks y el arranque automático.
@@ -58,7 +58,7 @@ Quita los hooks y el arranque automático.
 ## Empaquetar como .app
 
 ```bash
-./bundle.sh   # genera ClaudeStatusBar.app (LSUIElement, menu-bar agent)
+./bundle.sh   # genera ClawBar.app (LSUIElement, menu-bar agent)
 ```
 
 Produce un `.app` de doble clic. La distribución firmada con auto-update real
@@ -68,7 +68,7 @@ basta `./install.sh`.
 ## Como plugin de Claude Code
 
 `.claude-plugin/plugin.json` + `hooks/hooks.json` dejan el proyecto listo para
-instalarse como plugin (los hooks apuntan a `~/.claude-status-bar/bin/claude-status-bar`).
+instalarse como plugin (los hooks apuntan a `~/.clawbar/bin/clawbar`).
 Requiere que el binario esté instalado antes (`./install.sh`).
 
 ## Sobre el costo de tokens
@@ -80,8 +80,8 @@ Los conteos de tokens sí son exactos (leídos del `transcript_path`).
 ## Cómo funciona
 
 Los hooks de Claude Code (`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`,
-`Stop`, `SessionStart/End`) ejecutan `claude-status-bar hook <Event>`, que lee el JSON del
-evento por stdin y actualiza `~/.claude-status-bar/state.json` (con `flock`). La app observa
+`Stop`, `SessionStart/End`) ejecutan `clawbar hook <Event>`, que lee el JSON del
+evento por stdin y actualiza `~/.clawbar/state.json` (con `flock`). La app observa
 ese archivo por mtime y redibuja el título de la barra. Los hooks son `async`, así que no
 añaden latencia a Claude.
 

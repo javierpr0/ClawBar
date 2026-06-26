@@ -1,25 +1,25 @@
 {
   "hooks": {
     "SessionStart": [
-      { "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook SessionStart", "async": true } ] }
+      { "hooks": [ { "type": "command", "command": "\"$HOME/.clawbar/bin/clawbar\" hook SessionStart", "async": true } ] }
     ],
     "UserPromptSubmit": [
-      { "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook UserPromptSubmit", "async": true } ] }
+      { "hooks": [ { "type": "command", "command": "\"$HOME/.clawbar/bin/clawbar\" hook UserPromptSubmit", "async": true } ] }
     ],
     "PreToolUse": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook PreToolUse", "async": true } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.clawbar/bin/clawbar\" hook PreToolUse", "async": true } ] }
     ],
     "PostToolUse": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook PostToolUse", "async": true } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.clawbar/bin/clawbar\" hook PostToolUse", "async": true } ] }
     ],
     "Notification": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook Notification", "async": true } ] }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.clawbar/bin/clawbar\" hook Notification", "async": true } ] }
     ],
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook Stop", "async": true } ] }
+      { "hooks": [ { "type": "command", "command": "\"$HOME/.clawbar/bin/clawbar\" hook Stop", "async": true } ] }
     ],
     "SessionEnd": [
-      { "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook SessionEnd", "async": true } ] }
+      { "hooks": [ { "type": "command", "command": "\"$HOME/.clawbar/bin/clawbar\" hook SessionEnd", "async": true } ] }
     ]
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "claude-status-bar",
+  "name": "clawbar",
   "version": "1.0.0",
   "description": "macOS menu bar app that shows Claude Code status at a glance.",
   "author": "Eduardo Maldonado",

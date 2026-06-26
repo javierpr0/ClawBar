@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "claude-status-bar",
+    name: "clawbar",
     platforms: [.macOS(.v12)],
     targets: [
         .executableTarget(
-            name: "claude-status-bar",
-            path: "Sources/claude-status-bar"
+            name: "clawbar",
+            path: "Sources/clawbar"
         )
     ]
 )

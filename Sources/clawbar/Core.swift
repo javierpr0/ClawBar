@@ -41,7 +41,7 @@ struct AppState: Codable {
 
 enum Store {
     static var dir: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude-status-bar")
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".clawbar")
     }
     static var stateURL: URL { dir.appendingPathComponent("state.json") }
     static var lockURL: URL { dir.appendingPathComponent("state.lock") }
@@ -247,14 +247,14 @@ enum Transcript {
 // MARK: - Install / update
 
 enum Install {
-    static var binDest: URL { Store.dir.appendingPathComponent("bin/claude-status-bar") }
+    static var binDest: URL { Store.dir.appendingPathComponent("bin/clawbar") }
     static var settingsURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/settings.json")
     }
     static var launchAgentURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents/com.claudestatusbar.agent.plist")
+            .appendingPathComponent("Library/LaunchAgents/com.clawbar.agent.plist")
     }
 
     static func currentExe() -> String {
@@ -285,7 +285,7 @@ enum Install {
         }
         configure(binPath: dest)
         print("""
-        claude-status-bar \(VERSION) instalado.
+        clawbar \(VERSION) instalado.
           binario:  \(dest)
           hooks:    \(settingsURL.path)
           autostart:\(launchAgentURL.path)
@@ -323,7 +323,7 @@ enum Install {
             // drop our previous groups so re-install never duplicates
             groups = groups.filter { g in
                 let hs = g["hooks"] as? [[String: Any]] ?? []
-                return !hs.contains { ($0["command"] as? String)?.contains("claude-status-bar") ?? false }
+                return !hs.contains { ($0["command"] as? String)?.contains("clawbar") ?? false }
             }
             var group: [String: Any] = [
                 "hooks": [[
@@ -350,7 +350,7 @@ enum Install {
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-          <key>Label</key><string>com.claudestatusbar.agent</string>
+          <key>Label</key><string>com.clawbar.agent</string>
           <key>ProgramArguments</key>
           <array><string>\(binPath)</string></array>
           <key>RunAtLoad</key><true/>
@@ -377,7 +377,7 @@ enum Install {
                 if var groups = hooks[event] as? [[String: Any]] {
                     groups = groups.filter { g in
                         let hs = g["hooks"] as? [[String: Any]] ?? []
-                        return !hs.contains { ($0["command"] as? String)?.contains("claude-status-bar") ?? false }
+                        return !hs.contains { ($0["command"] as? String)?.contains("clawbar") ?? false }
                     }
                     hooks[event] = groups.isEmpty ? nil : groups
                 }
@@ -388,7 +388,7 @@ enum Install {
                 try? out.write(to: settingsURL, options: .atomic)
             }
         }
-        print("claude-status-bar desinstalado (hooks y autostart removidos).")
+        print("clawbar desinstalado (hooks y autostart removidos).")
     }
 
     static func quoted(_ path: String) -> String {
