@@ -68,14 +68,17 @@ Abrir la primera vez). La distribución firmada/notarizada con auto-update silen
 ## Releases automáticos
 
 Al hacer push de un tag `v*`, el workflow `.github/workflows/release.yml` compila,
-empaqueta `ClawBar.app`, lo zipea y publica un GitHub Release con el `.zip` + el binario.
-El tag también fija la versión del binario (`v1.2.0` → `VERSION = "1.2.0"`).
+empaqueta `ClawBar.app` (con ícono), lo zipea y publica un GitHub Release con el `.zip` +
+el binario. El tag también fija la versión del binario (`v1.2.0` → `VERSION = "1.2.0"`).
+
+Para cortar una versión, un comando:
 
 ```bash
-# editar VERSION en Sources/clawbar/Core.swift, luego:
-git tag v1.0.0
-git push master v1.0.0   # CI crea el release
+./release.sh 1.0.1   # bumpea VERSION, commitea, taggea y pushea -> CI publica el release
 ```
+
+El script valida la versión (`X.Y.Z`), exige árbol git limpio, rechaza tags repetidos y
+detecta solo el remote/rama.
 
 ## Buscar actualizaciones
 
