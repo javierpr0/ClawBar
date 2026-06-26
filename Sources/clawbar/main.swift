@@ -108,6 +108,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         timer = t
 
         maybeAutoCheck() // silent once-a-day update check
+        maybeOfferInstall() // first run from a downloaded .app: wire hooks + autostart
+    }
+
+    // If hooks/autostart aren't set up (e.g. launched from a freshly unzipped ClawBar.app),
+    // offer to run the installer so the user never needs the terminal.
+    func maybeOfferInstall() {
+        if Install.isInstalled() { return }
+        let a = NSAlert()
+        a.messageText = "Configurar ClawBar"
+        a.informativeText = "Instalar los hooks de Claude Code y el arranque automático para que la barra "
+            + "siga tus sesiones. Puedes deshacerlo luego con «clawbar uninstall»."
+        a.addButton(withTitle: "Instalar")
+        a.addButton(withTitle: "Ahora no")
+        NSApp.activate(ignoringOtherApps: true)
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        Install.runCLI() // copies binary to ~/.clawbar/bin, writes hooks, loads the launch agent
+        alert("ClawBar instalado",
+              "Hooks y arranque automático listos. Reinicia las sesiones de Claude Code abiertas.")
+        NSApp.terminate(nil) // the launch agent now runs the installed copy; avoid a duplicate icon
     }
 
     // MARK: loop
@@ -378,6 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         addItem("Reinstalar hooks", #selector(reinstall))
         addItem("Buscar actualizaciones…", #selector(checkForUpdate))
+        addItem("Desinstalar ClawBar…", #selector(uninstallApp))
         let about = NSMenuItem(title: "ClawBar v\(VERSION)", action: nil, keyEquivalent: "")
         about.isEnabled = false
         menu.addItem(about)
@@ -418,8 +438,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func tokensLine(_ s: Session) -> String? {
         guard let u = Transcript.usage(path: s.transcript) else { return nil }
-        func k(_ n: Int) -> String { n >= 1000 ? String(format: "%.1fk", Double(n) / 1000) : "\(n)" }
-        var line = "\(k(u.input)) ↑ / \(k(u.output)) ↓  (cache \(k(u.cacheRead + u.cacheWrite)))"
+        func h(_ n: Int) -> String {
+            if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+            if n >= 1_000 { return String(format: "%.1fk", Double(n) / 1_000) }
+            return "\(n)"
+        }
+        var line = "\(h(u.input)) ↑ / \(h(u.output)) ↓  (cache \(h(u.cacheRead + u.cacheWrite)))"
         if let cost = estimateCost(usage: u, model: s.model) { line += "  ~$\(String(format: "%.2f", cost))" }
         return line
     }
@@ -714,6 +738,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func prefColor(_ p: NSPopUpButton) {
         let keys = (p.identifier?.rawValue ?? "").split(separator: ",").map(String.init)
         if p.indexOfSelectedItem < keys.count { iconColor = keys[p.indexOfSelectedItem]; lastSig = ""; render() }
+    }
+
+    @objc func uninstallApp() {
+        let a = NSAlert()
+        a.messageText = "¿Desinstalar ClawBar?"
+        a.informativeText = "Quita los hooks de Claude Code y el arranque automático. El binario en "
+            + "~/.clawbar permanece; bórralo a mano si quieres."
+        a.addButton(withTitle: "Desinstalar")
+        a.addButton(withTitle: "Cancelar")
+        a.alertStyle = .warning
+        NSApp.activate(ignoringOtherApps: true)
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        // run the work in a detached child: unloading our own launch agent would kill us mid-cleanup
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: Install.currentExe())
+        p.arguments = ["uninstall"]
+        try? p.run()
+        NSApp.terminate(nil)
     }
 
     @objc func quit() { NSApp.terminate(nil) }

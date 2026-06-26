@@ -262,6 +262,12 @@ enum Install {
         return URL(fileURLWithPath: p).resolvingSymlinksInPath().path
     }
 
+    // Hooks wired to our binary AND the launch agent present => fully set up.
+    static func isInstalled() -> Bool {
+        let hooksWired = (try? String(contentsOf: settingsURL, encoding: .utf8))?.contains(binDest.path) ?? false
+        return hooksWired && FileManager.default.fileExists(atPath: launchAgentURL.path)
+    }
+
     @discardableResult
     static func run(_ path: String, _ args: [String]) -> Int32 {
         let p = Process()

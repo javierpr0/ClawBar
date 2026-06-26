@@ -99,6 +99,20 @@ El costo es **aproximado**: precios por millón de tokens codificados en el bina
 (Opus 15/75, Sonnet 3/15, Haiku 1/5; cache read ×0.1, write ×1.25). Pueden cambiar.
 Los conteos de tokens sí son exactos (leídos del `transcript_path`).
 
+## Privacidad
+
+ClawBar es local. No envía tu actividad a ningún lado. Lee tu `transcript_path` **en
+disco** solo para contar tokens del turno y todo el estado vive en `~/.clawbar/state.json`.
+La única salida a red es el chequeo de actualizaciones contra la API pública de GitHub
+Releases (1×/día y al pulsar "Buscar actualizaciones"); las notificaciones de permiso usan
+`osascript` local. Sin telemetría, sin analytics, sin cuentas.
+
+## Primer arranque
+
+Si abres `ClawBar.app` y los hooks aún no están configurados, la app ofrece instalarlos
+(hooks + arranque automático) con un clic — no necesitas la terminal. Desde el menú puedes
+**Reinstalar hooks** o **Desinstalar ClawBar** cuando quieras.
+
 ## Cómo funciona
 
 Los hooks de Claude Code (`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`,
