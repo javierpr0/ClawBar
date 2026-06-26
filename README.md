@@ -24,7 +24,14 @@ actúa como hook y como instalador.
   (o dejarlo en automático = la más reciente). Sigue una sesión a la vez pero
   detecta varias. Clic en una sesión la fija **y trae su app al frente**
   (Terminal/iTerm/VS Code/Cursor/Claude).
-- Reinstalar hooks · Salir.
+- **Notificar permisos**: banner nativo de macOS cuando Claude pide permiso.
+- **Preferencias…**: ventana con los mismos ajustes (⌘,).
+- Reinstalar hooks · Buscar actualizaciones · Salir.
+
+El menú también muestra, para la sesión activa: **modelo** (`Opus 4.8`) con badges
+`[plan]` / `[max]` (de `permission_mode` + `effort`), **carpeta**, **herramientas del
+turno** (`Leyendo×2, Editando×1`), **tokens** del transcript (`↑ entrada / ↓ salida`,
+cache, y costo aproximado), e **historial del día** (turnos · total · más largo).
 
 Funciona con Claude Code en terminal, la pestaña **Code** de la app de escritorio y
 **Cursor** — todos leen `~/.claude/settings.json`, donde el instalador escribe los hooks.
@@ -47,6 +54,28 @@ abiertas para que tomen los hooks. Vuelve a ejecutarlo para actualizar.
 ```
 
 Quita los hooks y el arranque automático.
+
+## Empaquetar como .app
+
+```bash
+./bundle.sh   # genera ClaudeStatusBar.app (LSUIElement, menu-bar agent)
+```
+
+Produce un `.app` de doble clic. La distribución firmada con auto-update real
+(Sparkle: appcast + firma + hosting) queda pendiente; para actualizar desde fuente
+basta `./install.sh`.
+
+## Como plugin de Claude Code
+
+`.claude-plugin/plugin.json` + `hooks/hooks.json` dejan el proyecto listo para
+instalarse como plugin (los hooks apuntan a `~/.claude-status-bar/bin/claude-status-bar`).
+Requiere que el binario esté instalado antes (`./install.sh`).
+
+## Sobre el costo de tokens
+
+El costo es **aproximado**: precios por millón de tokens codificados en el binario
+(Opus 15/75, Sonnet 3/15, Haiku 1/5; cache read ×0.1, write ×1.25). Pueden cambiar.
+Los conteos de tokens sí son exactos (leídos del `transcript_path`).
 
 ## Cómo funciona
 

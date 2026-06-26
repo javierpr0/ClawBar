@@ -40,9 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let menu = NSMenu()
     var timer: Timer?
     var lastMtime: Date = .distantPast
-    var state = AppState(sessions: [:], soundSeq: 0)
+    var state = AppState(sessions: [:], soundSeq: 0, history: nil)
     var lastSoundSeq = -1
     var lastSig = ""
+    var notifiedWaiting = Set<String>() // sessions we've already alerted about (one banner per gate)
+    var prefsWindow: NSWindow?
     let defaults = UserDefaults.standard
 
     // soft completion chime (embedded mp3); falls back to a system sound
@@ -82,6 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         get { defaults.string(forKey: "pinnedSession") }
         set { defaults.set(newValue, forKey: "pinnedSession") }
     }
+    var notifyPermission: Bool {
+        get { defaults.object(forKey: "notifyPermission") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "notifyPermission") }
+    }
     // nil => adaptive template (system black/white); else brand orange
     var tintColor: NSColor? { iconColor == "orange" ? CLAUDE_ORANGE : nil }
 
@@ -116,7 +122,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if soundEnabled { completionSound?.play() }
                 lastSoundSeq = state.soundSeq
             }
+            detectPermissionGates()
         }
+    }
+
+    // Fire one native banner per session that newly entered the permission gate.
+    func detectPermissionGates() {
+        for (id, s) in state.sessions {
+            if s.status == "waiting" {
+                if notifiedWaiting.insert(id).inserted, notifyPermission {
+                    postPermissionNotification(s)
+                }
+            } else {
+                notifiedWaiting.remove(id)
+            }
+        }
+    }
+
+    func postPermissionNotification(_ s: Session) {
+        let proj = URL(fileURLWithPath: s.cwd).lastPathComponent
+        func esc(_ x: String) -> String { x.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") }
+        let script = "display notification \"\(esc(proj)) · \(esc(s.client))\" with title \"Claude espera tu permiso\""
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        p.arguments = ["-e", script]
+        try? p.run()
     }
 
     // Pick the one session the icon follows: pinned, else newest busy, else newest.
@@ -135,6 +165,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let s = activeSession()
         let status = s?.status ?? "idle"
         let animating = status == "thinking" || status == "tool"
+
+        // tooltip: client + model, so a glance on hover identifies the session
+        if let s = s {
+            let proj = URL(fileURLWithPath: s.cwd).lastPathComponent
+            button.toolTip = "Claude · \(s.client) · \(proj)" + (s.model.map { " · \(modelName($0))" } ?? "")
+        } else {
+            button.toolTip = "Claude inactivo"
+        }
 
         var label = ""
         switch status {
@@ -296,10 +334,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let header = NSMenuItem(title: headerText(), action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
+
+        // active-session detail rows (model + flags, working dir, tools, tokens)
+        if let s = activeSession() {
+            if let m = s.model { addInfo("Modelo: \(modelName(m))\(badges(s))") }
+            addInfo("Carpeta: \(s.cwd)")
+            if let tools = toolsLine(s) { addInfo("Herramientas: \(tools)") }
+            if let tk = tokensLine(s) { addInfo("Tokens: \(tk)") }
+        }
+        if let h = historyLine() { addInfo(h) }
         menu.addItem(.separator())
 
         addCheck("Mostrar temporizador", checked: showTimer, #selector(toggleTimer))
         addCheck("Sonido al terminar (> 1 min)", checked: soundEnabled, #selector(toggleSound))
+        addCheck("Notificar permisos", checked: notifyPermission, #selector(toggleNotify))
 
         let anim = NSMenuItem(title: "Estilo de animación", action: nil, keyEquivalent: "")
         anim.submenu = radioMenu([("spark", "Spark"), ("terminal", "Terminal"), ("crab", "Crab")],
@@ -311,16 +359,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                   current: iconColor, action: #selector(setColor(_:)))
         menu.addItem(color)
 
+        addItem("Preferencias…", #selector(openPrefs), key: ",")
+
         menu.addItem(.separator())
         menu.addItem(sessionsItem())
 
         menu.addItem(.separator())
         addItem("Reinstalar hooks", #selector(reinstall))
+        addItem("Buscar actualizaciones…", #selector(checkForUpdate))
         let about = NSMenuItem(title: "claude-status-bar v\(VERSION)", action: nil, keyEquivalent: "")
         about.isEnabled = false
         menu.addItem(about)
         menu.addItem(.separator())
         addItem("Salir", #selector(quit), key: "q")
+    }
+
+    func addInfo(_ title: String) {
+        let it = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        it.isEnabled = false
+        menu.addItem(it)
+    }
+
+    // MARK: info-row builders
+
+    func modelName(_ id: String) -> String {
+        var s = id.replacingOccurrences(of: "claude-", with: "")
+        s = s.replacingOccurrences(of: "[1m]", with: "")
+        // drop a trailing release date segment (e.g. 20251001); keep family + version
+        let parts = s.split(separator: "-").map(String.init).filter { !($0.count >= 6 && $0.allSatisfy(\.isNumber)) }
+        guard let fam = parts.first else { return s }
+        let family = fam.prefix(1).uppercased() + fam.dropFirst()
+        let version = parts.dropFirst().joined(separator: ".") // "4","8" -> "4.8"
+        return version.isEmpty ? family : "\(family) \(version)"
+    }
+
+    func badges(_ s: Session) -> String {
+        var b: [String] = []
+        if let m = s.mode, m != "default", !m.isEmpty { b.append(m) }
+        if let e = s.effort, ["high", "xhigh", "max"].contains(e) { b.append(e) }
+        return b.isEmpty ? "" : "  [\(b.joined(separator: " · "))]"
+    }
+
+    func toolsLine(_ s: Session) -> String? {
+        guard let c = s.toolCounts, !c.isEmpty else { return nil }
+        return c.sorted { $0.value > $1.value }.map { "\($0.key)×\($0.value)" }.joined(separator: ", ")
+    }
+
+    func tokensLine(_ s: Session) -> String? {
+        guard let u = Transcript.usage(path: s.transcript) else { return nil }
+        func k(_ n: Int) -> String { n >= 1000 ? String(format: "%.1fk", Double(n) / 1000) : "\(n)" }
+        var line = "\(k(u.input)) ↑ / \(k(u.output)) ↓  (cache \(k(u.cacheRead + u.cacheWrite)))"
+        if let cost = estimateCost(usage: u, model: s.model) { line += "  ~$\(String(format: "%.2f", cost))" }
+        return line
+    }
+
+    func historyLine() -> String? {
+        guard let h = state.history, h.date == todayString(), h.turns > 0 else { return nil }
+        return "Hoy: \(h.turns) turnos · total \(fmt(Int(h.totalSecs))) · máx \(fmt(Int(h.longestSecs)))"
+    }
+
+    // Approximate USD. Prices per million tokens; may drift — see README.
+    func estimateCost(usage u: TokenUsage, model: String?) -> Double? {
+        let id = (model ?? "").lowercased()
+        let price: (inTok: Double, outTok: Double) // $/MTok
+        if id.contains("opus") { price = (15, 75) }
+        else if id.contains("haiku") { price = (1, 5) }
+        else if id.contains("sonnet") { price = (3, 15) }
+        else { return nil }
+        let cacheRead = price.inTok * 0.1, cacheWrite = price.inTok * 1.25
+        return (Double(u.input) * price.inTok + Double(u.output) * price.outTok
+              + Double(u.cacheRead) * cacheRead + Double(u.cacheWrite) * cacheWrite) / 1_000_000
     }
 
     func sessionsItem() -> NSMenuItem {
@@ -394,7 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if s.turnStart > 0 {
             t += " · \(fmt(Int(Date().timeIntervalSince1970 - s.turnStart)))"
         }
-        return t
+        return t + badges(s)
     }
 
     func dot(_ status: String) -> String {
@@ -408,6 +516,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: actions
     @objc func toggleTimer() { showTimer.toggle(); lastSig = ""; render() }
     @objc func toggleSound() { soundEnabled.toggle() }
+    @objc func toggleNotify() { notifyPermission.toggle() }
     @objc func setAnim(_ i: NSMenuItem) { animStyle = (i.representedObject as? String) ?? "spark"; lastSig = ""; render() }
     @objc func setColor(_ i: NSMenuItem) { iconColor = (i.representedObject as? String) ?? "orange"; lastSig = ""; render() }
     @objc func pinSession(_ i: NSMenuItem) {
@@ -438,11 +547,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     @objc func reinstall() {
         Install.configure(binPath: Install.currentExe())
+        alert("Hooks reinstalados", "Reinicia las sesiones de Claude Code abiertas para que tomen los hooks.")
+    }
+
+    // #12: source installs update via `git pull && ./install.sh`. A signed .app + Sparkle
+    // appcast needs hosting/signing (see README); here we just report the running version.
+    @objc func checkForUpdate() {
+        alert("claude-status-bar v\(VERSION)",
+              "Para actualizar: en la carpeta del proyecto corre  ./install.sh  (recompila y recarga el agente). "
+              + "La distribución firmada con auto-update (Sparkle) está pendiente.")
+    }
+
+    func alert(_ title: String, _ body: String) {
         let a = NSAlert()
-        a.messageText = "Hooks reinstalados"
-        a.informativeText = "Reinicia las sesiones de Claude Code abiertas para que tomen los hooks."
+        a.messageText = title
+        a.informativeText = body
         NSApp.activate(ignoringOtherApps: true)
         a.runModal()
     }
+
+    // MARK: preferences window (#11) — mirrors the menu toggles in a small panel
+    @objc func openPrefs() {
+        if let w = prefsWindow { NSApp.activate(ignoringOtherApps: true); w.makeKeyAndOrderFront(nil); return }
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 250),
+                         styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        w.title = "Preferencias"
+        w.isReleasedWhenClosed = false
+        w.center()
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        stack.addArrangedSubview(prefCheck("Mostrar temporizador", showTimer, #selector(prefTimer(_:))))
+        stack.addArrangedSubview(prefCheck("Sonido al terminar (> 1 min)", soundEnabled, #selector(prefSound(_:))))
+        stack.addArrangedSubview(prefCheck("Notificar permisos", notifyPermission, #selector(prefNotify(_:))))
+        stack.addArrangedSubview(prefPopup("Animación:", ["spark", "terminal", "crab"],
+                                           ["Spark", "Terminal", "Crab"], animStyle, #selector(prefAnim(_:))))
+        stack.addArrangedSubview(prefPopup("Color:", ["orange", "system"],
+                                           ["Naranja", "Sistema"], iconColor, #selector(prefColor(_:))))
+
+        let content = NSView()
+        content.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: content.topAnchor),
+        ])
+        w.contentView = content
+        prefsWindow = w
+        NSApp.activate(ignoringOtherApps: true)
+        w.makeKeyAndOrderFront(nil)
+    }
+
+    func prefCheck(_ title: String, _ on: Bool, _ sel: Selector) -> NSButton {
+        let b = NSButton(checkboxWithTitle: title, target: self, action: sel)
+        b.state = on ? .on : .off
+        return b
+    }
+
+    func prefPopup(_ label: String, _ keys: [String], _ titles: [String], _ current: String, _ sel: Selector) -> NSView {
+        let row = NSStackView()
+        row.spacing = 8
+        let l = NSTextField(labelWithString: label)
+        let pop = NSPopUpButton()
+        pop.addItems(withTitles: titles)
+        if let idx = keys.firstIndex(of: current) { pop.selectItem(at: idx) }
+        pop.target = self
+        pop.action = sel
+        pop.identifier = NSUserInterfaceItemIdentifier(keys.joined(separator: ",")) // carry keys for the handler
+        row.addArrangedSubview(l)
+        row.addArrangedSubview(pop)
+        return row
+    }
+
+    @objc func prefTimer(_ b: NSButton) { showTimer = b.state == .on; lastSig = ""; render() }
+    @objc func prefSound(_ b: NSButton) { soundEnabled = b.state == .on }
+    @objc func prefNotify(_ b: NSButton) { notifyPermission = b.state == .on }
+    @objc func prefAnim(_ p: NSPopUpButton) {
+        let keys = (p.identifier?.rawValue ?? "").split(separator: ",").map(String.init)
+        if p.indexOfSelectedItem < keys.count { animStyle = keys[p.indexOfSelectedItem]; lastSig = ""; render() }
+    }
+    @objc func prefColor(_ p: NSPopUpButton) {
+        let keys = (p.identifier?.rawValue ?? "").split(separator: ",").map(String.init)
+        if p.indexOfSelectedItem < keys.count { iconColor = keys[p.indexOfSelectedItem]; lastSig = ""; render() }
+    }
+
     @objc func quit() { NSApp.terminate(nil) }
 }

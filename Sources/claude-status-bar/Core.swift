@@ -16,11 +16,25 @@ struct Session: Codable {
     var turnStart: Double    // epoch seconds; 0 when idle
     var lastUpdate: Double
     var lastTurnDuration: Double
+    var model: String?       // e.g. claude-opus-4-8
+    var mode: String?        // permission_mode: default|plan|acceptEdits|auto|...
+    var effort: String?      // effort.level: low|medium|high|xhigh|max
+    var transcript: String?  // transcript_path, for token/cost accounting
+    var toolCounts: [String: Int]? // label -> uses this turn
+}
+
+struct History: Codable {
+    var date: String         // yyyy-MM-dd (local)
+    var turns: Int
+    var totalSecs: Double
+    var longestSecs: Double
+    var lastSecs: Double
 }
 
 struct AppState: Codable {
     var sessions: [String: Session]
     var soundSeq: Int
+    var history: History?    // optional: old state.json without this key still decodes
 }
 
 // MARK: - Store (state.json + flock)
@@ -39,7 +53,7 @@ enum Store {
     static func load() -> AppState {
         guard let data = try? Data(contentsOf: stateURL),
               let st = try? JSONDecoder().decode(AppState.self, from: data) else {
-            return AppState(sessions: [:], soundSeq: 0)
+            return AppState(sessions: [:], soundSeq: 0, history: nil)
         }
         return st
     }
@@ -103,6 +117,12 @@ func fmt(_ secs: Int) -> String {
     return String(format: "%d:%02d", s / 60, s % 60)
 }
 
+func todayString() -> String {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd"
+    return f.string(from: Date())
+}
+
 // MARK: - Hook subcommand
 
 enum Hook {
@@ -113,6 +133,10 @@ enum Hook {
         let cwd = (j["cwd"] as? String) ?? FileManager.default.currentDirectoryPath
         let toolName = j["tool_name"] as? String
         let notifType = j["notification_type"] as? String
+        let model = j["model"] as? String
+        let mode = j["permission_mode"] as? String
+        let effort = (j["effort"] as? [String: Any])?["level"] as? String
+        let transcript = j["transcript_path"] as? String
         let client = detectClient()
         let bundleId = ProcessInfo.processInfo.environment["__CFBundleIdentifier"]
         let now = Date().timeIntervalSince1970
@@ -127,6 +151,10 @@ enum Hook {
                 s.cwd = cwd
                 s.client = client
                 if let bundleId = bundleId { s.bundleId = bundleId }
+                if let model = model { s.model = model }
+                if let mode = mode { s.mode = mode }
+                if let effort = effort { s.effort = effort }
+                if let transcript = transcript { s.transcript = transcript }
                 s.lastUpdate = now
 
                 switch event {
@@ -134,9 +162,12 @@ enum Hook {
                     s.status = "idle"; s.turnStart = 0; s.tool = nil; s.label = nil
                 case "UserPromptSubmit":
                     s.status = "thinking"; s.turnStart = now; s.tool = nil; s.label = nil
+                    s.toolCounts = [:] // new turn resets per-turn tool tally
                 case "PreToolUse":
                     s.status = "tool"; s.tool = toolName; s.label = labelFor(toolName)
                     if s.turnStart == 0 { s.turnStart = now }
+                    let key = labelFor(toolName)
+                    if !key.isEmpty { var c = s.toolCounts ?? [:]; c[key, default: 0] += 1; s.toolCounts = c }
                 case "PostToolUse", "PostToolUseFailure", "PostToolBatch":
                     s.status = "thinking"; s.tool = nil; s.label = nil
                     if s.turnStart == 0 { s.turnStart = now }
@@ -154,6 +185,7 @@ enum Hook {
                         let dur = now - s.turnStart
                         s.lastTurnDuration = dur
                         if dur > 60 { state.soundSeq += 1 }
+                        recordTurn(&state, duration: dur)
                     }
                     s.status = "idle"; s.turnStart = 0; s.tool = nil; s.label = nil
                 default:
@@ -165,6 +197,50 @@ enum Hook {
             let cutoff = now - 6 * 3600
             state.sessions = state.sessions.filter { $0.value.lastUpdate > cutoff }
         }
+    }
+
+    static func recordTurn(_ state: inout AppState, duration: Double) {
+        let today = todayString()
+        var h = state.history ?? History(date: today, turns: 0, totalSecs: 0, longestSecs: 0, lastSecs: 0)
+        if h.date != today { h = History(date: today, turns: 0, totalSecs: 0, longestSecs: 0, lastSecs: 0) }
+        h.turns += 1
+        h.totalSecs += duration
+        h.longestSecs = max(h.longestSecs, duration)
+        h.lastSecs = duration
+        state.history = h
+    }
+}
+
+// MARK: - Token accounting from a session transcript (.jsonl)
+
+struct TokenUsage {
+    var input = 0
+    var output = 0
+    var cacheRead = 0
+    var cacheWrite = 0
+    var total: Int { input + output + cacheRead + cacheWrite }
+}
+
+enum Transcript {
+    // Sum usage across every assistant message in the transcript. Best-effort: unreadable
+    // or malformed lines are skipped. Called on demand (menu open), not in the hot path.
+    static func usage(path: String?) -> TokenUsage? {
+        guard let path = path, let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        var u = TokenUsage()
+        var found = false
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard let data = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            // Claude Code transcript: {"message": {"usage": {...}}, ...}
+            let message = obj["message"] as? [String: Any]
+            guard let usage = (message?["usage"] ?? obj["usage"]) as? [String: Any] else { continue }
+            found = true
+            u.input += usage["input_tokens"] as? Int ?? 0
+            u.output += usage["output_tokens"] as? Int ?? 0
+            u.cacheRead += usage["cache_read_input_tokens"] as? Int ?? 0
+            u.cacheWrite += usage["cache_creation_input_tokens"] as? Int ?? 0
+        }
+        return found ? u : nil
     }
 }
 

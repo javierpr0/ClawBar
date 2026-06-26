@@ -22,6 +22,18 @@
 - [x] install.sh + README
 - [x] Build release + smoke test hook->state->render
 
+## Ampliación (todas las features del roadmap)
+- [x] #2 modelo + carpeta en el menú
+- [x] #4 tokens/costo desde transcript_path (.jsonl)
+- [x] #6 contador de herramientas por turno
+- [x] #7 notificación nativa de permiso (osascript) + toggle
+- [x] #8 badges [plan]/[max] (permission_mode + effort)
+- [x] #9 cliente en tooltip/header
+- [x] #10 historial del día (turnos/total/más largo)
+- [x] #11 ventana de Preferencias
+- [x] #12 bundle.sh -> .app (Sparkle/firma diferido)
+- [x] #13 scaffold de plugin (.claude-plugin + hooks.json)
+
 ## Review
 - Build release OK (Swift 6.3). Smoke test: hook->state->stop verificado; multi-sesión (s1/s2) OK.
 - Rama sonido (turno >60s -> soundSeq++) verificada con turnStart en el pasado.

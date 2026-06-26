@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook SessionStart", "async": true } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook UserPromptSubmit", "async": true } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook PreToolUse", "async": true } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook PostToolUse", "async": true } ] }
+    ],
+    "Notification": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook Notification", "async": true } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook Stop", "async": true } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "\"$HOME/.claude-status-bar/bin/claude-status-bar\" hook SessionEnd", "async": true } ] }
+    ]
+  }
+}
