@@ -17,10 +17,14 @@ REMOTE=$(git remote | head -1)
 BRANCH=$(git branch --show-current)
 [ -z "$REMOTE" ] && { echo "no hay remote configurado"; exit 1; }
 
-# keep the source VERSION in sync with the tag
+# keep the source VERSION in sync with the tag (skip the commit if already at $V)
 sed -i '' "s/let VERSION = \".*\"/let VERSION = \"$V\"/" Sources/clawbar/Core.swift
-git add Sources/clawbar/Core.swift
-git commit -m "chore: release $TAG"
+if git diff --quiet Sources/clawbar/Core.swift; then
+  echo "VERSION ya es $V; taggeo el HEAD actual"
+else
+  git add Sources/clawbar/Core.swift
+  git commit -m "chore: release $TAG"
+fi
 git tag "$TAG"
 
 git push "$REMOTE" "$BRANCH"
